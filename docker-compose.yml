@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hmz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hmz}
+      POSTGRES_DB: ${POSTGRES_DB:-hmz}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hmz} -d ${POSTGRES_DB:-hmz}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hmz}:${POSTGRES_PASSWORD:-hmz}@db:5432/${POSTGRES_DB:-hmz}
+      PORT: "3000"
+      NODE_ENV: production
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: ${MAIL_FROM:-no-reply@hmz.local}
+      APP_URL: ${APP_URL:-http://localhost:8085}
+      RESET_TOKEN_SECRET: ${RESET_TOKEN_SECRET:-hmz-dev-reset-secret}
+      SESSION_TOKEN_SECRET: ${SESSION_TOKEN_SECRET:-hmz-dev-session-secret}
+    ports:
+      - "${BACKEND_PORT:-3300}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8085}:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:
